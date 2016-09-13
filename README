@@ -1,0 +1,20 @@
+==================
+Cython README file
+==================
+
+CythonPP V2.22
+
+CythonPP is an interface between C++ and python. It use cython and C++ templates to automatically port C++ class and functions into python.
+
+#Need
+* Python 2.7
+* Cython 0.22
+* g++
+
+#Installation
+cd CythonPP
+make install
+
+#Use
+Soon
+
