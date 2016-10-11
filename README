@@ -1,20 +1,27 @@
-==================
-Cython README file
-==================
+# `CythonPP`, a C++ interface for python library
 
-CythonPP V2.22
+`CythonPP` is a library for mapping C++ class/function for python.
 
-CythonPP is an interface between C++ and python. It use cython and C++ templates to automatically port C++ class and functions into python.
+## Requirements
 
-#Need
-* Python 2.7
-* Cython 0.22
-* g++
+`CythonPP` header is written in C++11 so you need a C++11 compiler like [Clang](http://clang.llvm.org/) or [GCC](http://gcc.gnu.org/).
+`CythonPP` interface code is written in cython and require cython and numpy 
 
-#Installation
-cd CythonPP
-make install
+## Install
 
-#Use
-Soon
+You can download the sources directly from github:
 
+    git clone https://github.com/raplonu/CythonPP.git
+
+
+## Use
+
+Soon !
+
+## Authors
+
+- Julien Bernard, julien dot bernard at obspm dot fr
+
+## Copyright
+
+This library is open source and is distributed under the [MIT licence](https://opensource.org/licenses/mit-license).
