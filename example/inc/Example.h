@@ -3,12 +3,12 @@
 #include <string>
 
 class Example {
-public:
-	Example(char c, int size, double* vect);
+	public:
+			Example(char c, int size, double* vect);
 
-	virtual ~Example();
+				virtual ~Example();
 
-	int todo(int i1, int i2, int i3);
+					int todo(int i1, int i2, int i3);
 };
 
 void test(std::string name);
