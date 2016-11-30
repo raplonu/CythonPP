@@ -1,210 +1,205 @@
 #pragma once
 
-#include <sstream>
+#include <memory>
 #include <string>
-#include <map>
-#include <typeinfo>
+#include <vector>
+#include <algorithm>
 #include <iostream>
 
 #include "Common.h"
 #include "Callable.h"
 
-class CallableManager
+template<typename T>
+class Store
 {
+protected:
+	std::vector<std::shared_ptr<T>> callables;
 public:
-	CallableManager(){}
+	Store():callables(){}
 
-	CallableManager(std::map<std::string, GCallable*> map):callableMap(map){}
-
-	virtual ~CallableManager(){
-		for(auto it(callableMap.begin()); it != callableMap.end(); ++it)
-			delete it->second;
+	std::vector<std::string> signatureName(std::size_t pos)
+	{
+		return callables[pos]->signatureName();
 	}
 
-	std::string names()
+	std::string returnName(std::size_t pos)
 	{
-		std::stringstream names;
-		if(!callableMap.empty())
-		{
-			names << callableMap.cbegin()->first;
-			for(auto it(std::next(callableMap.cbegin(), 1)); it != callableMap.cend(); ++it)
-				names << SUPERSEPARATOR << it->first;
-		}
-		return names.str();
-	}
-
-	std::string signature(std::string name)
-	{
-		return callableMap.at(name)->signature();
-	}
-	std::string returnValue(std::string name)
-	{
-		return callableMap.at(name)->returnValue();
-	}
-
-	Variant call(std::string name, Variant* args)
-	{
-		return callableMap.at(name)->call(args);
+		return callables[pos]->returnName();
 	}
 
 protected:
-	std::map<std::string, GCallable*> callableMap;
+	void add(T* element)
+	{
+		callables.emplace_back(element);
+	}
 };
 
+template<typename T>
+class NamedStore
+{
+protected:
+	std::vector<std::shared_ptr<T>> callables;
+	std::vector<std::string> names_;
+public:
+	NamedStore():callables(), names_(){}
 
-class GObject : public CallableManager
+	NamedStore(NamedStore<T>& namedStore):
+		callables(namedStore.callables),
+		names_(namedStore.names_)
+	{}
+
+	std::vector<std::string> names()
+	{
+		return names_;
+	}
+
+	std::vector<std::string> signatureName(std::size_t pos)
+	{
+		return callables[pos]->signatureName();
+	}
+
+	std::string returnName(std::size_t pos)
+	{
+		return callables[pos]->returnName();
+	}
+
+	void add(T* element, char const * name)
+	{
+		callables.emplace_back(element);
+		names_.emplace_back(name);
+	}
+};
+
+class GObject : public NamedStore<GMethod>
 {
 public:
-	using CallableManager::CallableManager;
+	GObject(NamedStore<GMethod> &storeMethod):
+		NamedStore<GMethod>(storeMethod)
+	{}
 
-	virtual ~GObject(){}
-
-	virtual std::string objSignature(){return "";}
+	virtual Variant call(std::size_t pos, Variant* args) = 0;
 };
 
-
-template<typename T, typename... Methods>
+template<typename T>
 class Object : public GObject
 {
+	std::unique_ptr<T> obj;
 public:
-	Object(T *obj):GObject(argsToMap<GCallable, Methods...>()), obj(obj)
+	Object(
+		NamedStore<GMethod> &storeMethod, Variant obj
+	):
+		GObject(storeMethod),
+		obj(reinterpret_cast<T*>(obj))
+	{}
+
+	virtual Variant call(std::size_t pos, Variant* args) override
 	{
-		for(auto it(callableMap.begin()); it != callableMap.end(); ++it)
-			it->second->setObj(reinterpret_cast<Variant>(obj));
-	}
-
-	virtual ~Object(){delete obj;}
-
-	virtual std::string objSignature()
-	{
-		return typeid(T).name();
-	}
-
-private:
-	T* obj;
-};
-
-
-
-class GObjectManager
-{
-public:
-	virtual ~GObjectManager(){}
-	virtual GObject* makeObject(Variant obj) = 0;
-	virtual std::string signature() = 0;
-};
-
-template<typename T, typename... Methods>
-class ObjectManager : public GObjectManager
-{
-public:
-	virtual ~ObjectManager(){}
-	virtual GObject* makeObject(Variant obj) override
-	{
-		return new Object<T, Methods...>(*reinterpret_cast<T**>(obj));
-	}
-	virtual std::string signature()
-	{
-		return typeid(T).name();
+		return callables[pos]->call(reinterpret_cast<Variant>(obj.get()), args);
 	}
 };
 
-template<typename... Constructor>
-class ConstructorManager : public CallableManager
+class ConstructorManager : public Store<GConstructor>
 {
 public:
-	ConstructorManager(): CallableManager(argsToMap<GCallable, Constructor...>()){}
+	ConstructorManager():Store<GConstructor>(){}
+
+	Variant create(std::size_t pos, Variant* args)
+	{
+		return callables[pos]->call(args);
+	}
+};
+
+class GClassStore : public ConstructorManager
+{
+protected:
+	NamedStore<GMethod> storeMethod;
+public:
+	GClassStore():
+		ConstructorManager(),
+		storeMethod()
+	{}
+
+	void addConstructor(GConstructor* constuctor)
+	{
+		ConstructorManager::add(constuctor);
+	}
+
+	void addMethod(GMethod* met, char const * metName)
+	{
+		storeMethod.add(met, metName);
+	}
+
+	virtual GObject* call(std::size_t pos, Variant* args) = 0;
+
+};
+
+template<typename T>
+class ClassStore : public GClassStore
+{
+public:
+	ClassStore():GClassStore(){}
+
+	virtual GObject* call(std::size_t pos, Variant* args) override
+	{
+		return new Object<T>(storeMethod, GClassStore::create(pos, args));
+	}
 };
 
 class ClassManager
 {
+protected:
+	std::vector<std::shared_ptr<GClassStore>> classesStore;
+	std::vector<std::string> names_;
 public:
-	ClassManager(): classMap(){}
+	ClassManager():
+		classesStore(),
+		names_()
+	{}
 
-	virtual ~ClassManager()
+	void addClass(GClassStore *classStore, char const * name)
 	{
-		for(auto it(classMap.begin()); it != classMap.end(); ++it)
-		{
-			delete it->second.first;
-			delete it->second.second;
-		}
+		classesStore.emplace_back(classStore);
+		names_.emplace_back(name);
 	}
 
-	template<typename ConstructorM, typename ObjectM>
-	void addClass(std::string name)//, ConstructorM coM, ObjectM meM)
+	GObject* create(std::size_t classPos, std::size_t constructorPos, Variant* args)
 	{
-		CallableManager* cmPtr = new ConstructorM;
-		GObjectManager* gomPtr = new ObjectM;
-		classMap.insert(
-			std::pair<
-				std::string,
-				std::pair<CallableManager*, GObjectManager*>>(
-						name,
-						std::pair<CallableManager*, GObjectManager*>(
-							cmPtr,
-							gomPtr
-		)));
+		return classesStore[classPos]->call(constructorPos, args);
 	}
 
-	Variant makeObject(std::string className, std::string constructorName, Variant * args)
+	std::vector<std::string> classNames()
 	{
-		auto p = classMap.at(className);
-		return reinterpret_cast<Variant>(p.second->makeObject(p.first->call(constructorName, args)));
+		return names_;
 	}
 
-	std::string classNames()
+	std::vector<std::string> signatureName(std::size_t classPos, std::size_t constructorPos)
 	{
-		std::stringstream names;
-		if(!classMap.empty())
-		{
-			names << classMap.cbegin()->first;
-			for(auto it(std::next(classMap.cbegin(), 1)); it != classMap.cend(); ++it)
-				names << SUPERSEPARATOR << it->first;
-		}
-		return names.str();
+		return classesStore[classPos]->signatureName(constructorPos);
 	}
 
-	std::string classNameById(std::string id)
+	std::string returnType(std::size_t pos)
 	{
-		std::cerr << "ID: :" << id << std::endl;
-		for(auto it(classMap.begin()); it != classMap.end(); ++it)
-		{
-			if(it->second.second->signature() == id)
-							return it->first;
-		}
-
-		return "NONE";
+		return names_[pos];
 	}
-
-	std::string constructorNames(std::string className)
-	{
-		return classMap.at(className).first->names();
-	}
-
-	std::string classSignature(std::string className, std::string constructorName)
-	{
-		return classMap.at(className).first->signature(constructorName);
-	}
-	std::string classReturnValue(std::string className, std::string constructorName)
-	{
-		return classMap.at(className).first->returnValue(constructorName);
-	}
-private:
-	std::map<std::string, std::pair<CallableManager*, GObjectManager*>> classMap;
 };
 
-
-
-class FunctionManager : public CallableManager
+class FunctionManager : public NamedStore<GFunction>
 {
 public:
-	FunctionManager(): CallableManager(){}
+	FunctionManager():NamedStore<GFunction>(){}
 
-	template<typename Fn>
-	void addFunction(std::string name)
+	void addFunction(GFunction* fun, char const * funName)
 	{
-		GCallable *funPtr = new Fn;
-		callableMap.insert(std::pair<std::string, GCallable*>(name, funPtr));
+		NamedStore<GFunction>::add(fun, funName);
+	}
+
+	Variant call(std::size_t pos, Variant* args)
+	{
+		return callables[pos]->call(args);
+	}
+
+	std::vector<std::string> functionNames()
+	{
+		return NamedStore<GFunction>::names();
 	}
 };
-

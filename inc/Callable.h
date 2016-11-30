@@ -1,5 +1,6 @@
 #pragma once
 
+#include <vector>
 #include <string>
 
 #include "Common.h"
@@ -7,37 +8,38 @@
 
 class GCallable
 {
+	std::vector<std::string> sigName;
+	std::string retName;
+
 public:
-	virtual ~GCallable(){}
-	virtual Variant call(Variant *args) = 0;
-	virtual std::string signature() = 0;
-	virtual std::string returnValue() = 0;
-	virtual void setObj(Variant obj){(void)obj;}
-protected:
-	virtual void internCall(Variant *args) = 0;
+	GCallable(
+		std::vector<std::string> && signatureName, std::string && returnName
+	):
+		sigName(signatureName),
+		retName(returnName)
+	{}
+
+	std::vector<std::string> signatureName() const
+	{
+		return sigName;
+	}
+
+	std::string returnName() const
+	{
+		return retName;
+	}
 };
 
-template<typename Ret, typename... Args>
-class Callable : public GCallable
+class GFunction : public GCallable
 {
 public:
-	virtual ~Callable(){}
+	GFunction(
+		std::vector<std::string> && signatureName, std::string && returnName
+	):
+		GCallable(std::move(signatureName), std::move(returnName))
+	{}
 
-	virtual Variant call(Variant *args) override
-	{
-		internCall(args);
-		return returnVal.returnAddr();
-	}
-	virtual std::string signature() override
-	{
-		return argsToString<Args...>();
-	}
-	virtual std::string returnValue() override
-	{
-		return argsToString<Ret>();
-	}
-protected:
-	Return<Ret> returnVal;
+	virtual Variant call(Variant *args) = 0;
 };
 
 template<typename Fn, Fn> class Function;
@@ -45,55 +47,79 @@ template<typename Fn, Fn> class Function;
 template<
 	typename Ret, typename... Args,
 	Ret (*Fn)(Args...)>
-class Function<Ret(*)(Args...), Fn> : public Callable<Ret, Args...>
+class Function<Ret(*)(Args...), Fn> : public GFunction
 {
+	Return<Ret> returnValue;
 public:
-	Function():fun(Fn){}
-	virtual ~Function(){}
-protected:
-	virtual void internCall(Variant *args) override
+	Function():
+		GFunction(argsToNames<Args...>(), nameOf<Ret>()), returnValue()
+	{}
+
+	virtual Variant call(Variant *args) override
 	{
-		this->returnVal.setValue(CallFun<Ret, Args...>::call(fun, args));
+		Call<Ret(*)(Args...), Fn>::call(returnValue, args);
+		return returnValue;
 	}
-private:
-	std::function<Ret(Args...)> fun;
 };
 
-template<typename Str, typename Fn, Fn> class Method;
-
-template<typename Str,
-	typename T, typename Ret, typename... Args,
-	Ret (T::*Fn)(Args...)>
-class Method<Str, Ret(T::*)(Args...), Fn> : public Callable<Ret, Args...>, public Named
+class GMethod : public GCallable
 {
 public:
-	Method():Callable<Ret, Args...>(), Named(Str::toString()), obj(nullptr), fun(Fn){}
-	virtual ~Method(){}
-	virtual void setObj(Variant obj)
+	GMethod(
+		std::vector<std::string> && signatureName, std::string && returnName
+	):
+		GCallable(std::move(signatureName), std::move(returnName))
+	{}
+
+	virtual Variant call(Variant obj, Variant *args) = 0;
+};
+
+template<typename Fn, Fn> class Method;
+
+template<
+	typename T, typename Ret, typename... Args,
+	Ret (T::*Fn)(Args...)>
+class Method<Ret(T::*)(Args...), Fn> : public GMethod
+{
+	Return<Ret> returnValue;
+public:
+	Method():
+		GMethod(argsToNames<Args...>(), nameOf<Ret>()), returnValue()
+	{}
+
+	virtual Variant call(Variant obj, Variant *args) override
 	{
-		this->obj = reinterpret_cast<T*>(obj);
+		Call<Ret(T::*)(Args...), Fn>::call(returnValue, *(T*)obj, args);
+		return returnValue;
 	}
-protected:
-	virtual void internCall(Variant *args) override
-	{
-		this->returnVal.setValue(CallMet<T, Ret, Args...>::call(fun, *obj, args));
-	}
-private:
-	T *obj;
-	std::function<Ret(T&, Args...)> fun;
+};
+
+class GConstructor : public GCallable
+{
+public:
+	GConstructor(
+		std::vector<std::string> && signatureName, std::string && returnName
+	):
+		GCallable(std::move(signatureName), std::move(returnName))
+	{}
+
+	virtual Variant call(Variant *args) = 0;
 };
 
 template<typename T, typename... Args> class Contructor;
 
 template<typename T, typename... Args>
-class Constructor : public Callable<T*, Args...>, public Named
+class Constructor : public GConstructor
 {
+	Return<T*> returnValue;
 public:
-	Constructor():Callable<T*, Args...>(), Named(argsToString<Args...>()){}
-	virtual ~Constructor(){}
-protected:
-	virtual void internCall(Variant *args) override
+	Constructor():
+		GConstructor(argsToNames<Args...>(), nameOf<T>()), returnValue()
+	{}
+
+	virtual Variant call(Variant *args) override
 	{
-		this->returnVal.setValue(CreatePtr<T, Args...>::call(args));
+		Construct<T, Args...>::call(returnValue, args);
+		return returnValue;
 	}
 };

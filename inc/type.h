@@ -16,3 +16,30 @@ using i64 = int64_t;
 
 using f32 = float;
 using f64 = double;
+
+//Choose arbitrarily a type for variant ptr
+// struct Variant
+// {
+//     using Var = unsigned long;
+//     Var ptr;
+//     template<typename T>
+//     void set(T *newPtr)
+//     {
+//         ptr = reinterpreter_cast<Var>(newPtr);
+//     }
+//
+//     template<typename T>
+//     T* get()
+//     {
+//         return reinterpreter_cast<T*>(ptr);
+//     }
+//
+//     template<typename T>
+//     T& get()
+//     {
+//         return *reinterpreter_cast<T*>(ptr);
+//     }
+// };
+
+using Variant = unsigned long;
+//using VoidRet = i32;

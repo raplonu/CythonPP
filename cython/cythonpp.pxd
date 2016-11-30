@@ -15,38 +15,38 @@ cdef extern from "../include/CythonUtils.h":
         T* castVariant(np.uint64_t ptr)
         @staticmethod
         T get(np.uint64_t ptr)
-        
+
     np.uint64_t makePtr[T](T val)
     np.uint64_t castPtr[T](T* ptr)
     void deletePtr(np.uint64_t ptr)
-    
+
 cdef extern from "../include/TaskManager.h":
     cdef cppclass GObject:
         GObject()
         np.uint64_t call(string methodName, np.uint64_t* args)
-        
+
         string names()
         string signature(string methodName)
         string returnValue(string methodName)
-    
+
     cdef cppclass TaskManager:
         TaskManager()
         np.uint64_t makeObject(string classBame, string constructorName, np.uint64_t* args)
         np.uint64_t call(string funName, np.uint64_t* args)
-        
+
         string classNames()
         string constructorNames(string className)
         string classNameById(string signature)
-        
+
         string classSignature(string className, string constructorName)
         string classReturnValue(string className)
-        
+
         string names()
         string signature(string name)
         string returnValue(string name)
-        
+
 cdef class Object:
     cdef GObject *go
-    
+
 cdef class GTaskMan:
     cdef TaskManager *tm
